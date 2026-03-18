@@ -1,0 +1,27 @@
+kind = "mobile"
+previewPath = "/"
+title = "Smart Soil"
+version = "1.0.0"
+id = "artifacts/smart-soil"
+router = "expo-domain"
+
+[[integratedSkills]]
+name = "expo"
+version = "1.0.0"
+
+[[services]]
+ensurePreviewReachable = "/status"
+localPort = 26091
+name = "expo"
+paths = ["/"]
+
+[services.development]
+run = "pnpm --filter @workspace/smart-soil run dev"
+
+[services.env]
+PORT = "26091"
+BASE_PATH = "/"
+
+[services.production]
+build = ["pnpm", "--filter", "@workspace/smart-soil", "run", "build"]
+run = ["pnpm", "--filter", "@workspace/smart-soil", "run", "serve"]

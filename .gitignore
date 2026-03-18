@@ -1,0 +1,29 @@
+# Ignore compiled binaries
+*.exe
+*.o
+*.bin
+
+# Ignore local configuration and secrets
+.env
+secrets.h
+
+# Ignore IDE specific files
+.vscode/
+.idea/
+
+# Ignore build artifacts
+build/
+out/
+
+# Dependencies
+node_modules/
+.pnpm-debug.log*
+
+# Expo
+.expo/
+dist/
+web-build/
+
+# Logic & Secrets
+.env
+*.local
