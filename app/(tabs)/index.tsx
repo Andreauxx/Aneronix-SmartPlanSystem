@@ -16,6 +16,7 @@ import { MoistureGauge } from "@/components/MoistureGauge";
 import { StatusDot } from "@/components/StatusDot";
 import { useSoilData } from "@/context/SoilDataContext";
 import { useTheme } from "@/hooks/useTheme";
+import "../../firebaseConfig";
 
 function formatTime(d: Date | null) {
   if (!d) return "Never";
@@ -45,8 +46,7 @@ export default function DashboardScreen() {
     weatherError,
     refreshSoil,
     refreshWeather,
-    firebaseUrl,
-    weatherApiKey,
+    weatherApiKey, // Removed firebaseUrl since Firebase is now automatic
   } = useSoilData();
 
   const isRefreshing = isLoadingSoil || isLoadingWeather;
@@ -103,12 +103,12 @@ export default function DashboardScreen() {
         message="Watering Paused: Rain Expected — soil moisture is low but rain is incoming."
       />
 
-      {/* Not configured notice */}
-      {(!firebaseUrl || !weatherApiKey) && (
+      {/* Not configured notice - UPDATED */}
+      {(!weatherApiKey) && (
         <View style={[styles.setupNotice, { backgroundColor: colors.cardWeather ?? colors.surface }]}>
           <Feather name="info" size={18} color={colors.warning} />
           <Text style={[styles.setupText, { color: colors.textSecondary, fontFamily: "Inter_400Regular" }]}>
-            Configure Firebase URL and Weather API key in Settings to see live data.
+            Configure your Weather API key in Settings to see live weather forecasts for Davao City.
           </Text>
         </View>
       )}
@@ -196,7 +196,7 @@ export default function DashboardScreen() {
       >
         <Ionicons name="refresh" size={18} color={colors.primary} />
         <Text style={[styles.refreshText, { color: colors.primary, fontFamily: "Inter_600SemiBold" }]}>
-          Refresh Data
+          Refresh Weather
         </Text>
       </TouchableOpacity>
     </ScrollView>

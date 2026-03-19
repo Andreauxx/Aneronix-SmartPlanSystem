@@ -12,6 +12,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useSoilData } from "@/context/SoilDataContext";
 import { useTheme } from "@/hooks/useTheme";
+import "../../firebaseConfig"; // Ensure Firebase is initialized before using it anywhere in the app
 
 type HistoryEntry = {
   id: string;
@@ -59,22 +60,43 @@ export default function HistoryScreen() {
     loadHistory();
   }, [loadHistory]);
 
-  // Save a snapshot whenever soil updates
+ // Save a snapshot whenever soil updates (WITH SMART THROTTLING)
   useEffect(() => {
-    if (!soil.lastUpdated) return;
-    const entry: HistoryEntry = {
-      id: soil.lastUpdated.toISOString() + Math.random(),
-      timestamp: soil.lastUpdated.toISOString(),
-      moisture: soil.moisture,
-      waterFlow: soil.waterFlow,
-    };
+    // Capture the exact date object so TypeScript knows it won't change to null inside the Promise
+    const currentDate = soil.lastUpdated;
+    
+    if (!currentDate) return;
+    
     AsyncStorage.getItem(HISTORY_KEY).then((raw) => {
       const existing: HistoryEntry[] = raw ? JSON.parse(raw) : [];
+      
+      // --- SMART THROTTLING LOGIC ---
+      if (existing.length > 0) {
+        const lastEntryTime = new Date(existing[0].timestamp).getTime();
+        const currentTime = currentDate.getTime();
+        const timeDiffMinutes = (currentTime - lastEntryTime) / (1000 * 60);
+        
+        // Calculate if moisture changed drastically (e.g., pump watered the plant)
+        const moistureDiff = Math.abs(existing[0].moisture - soil.moisture);
+
+        // ONLY save if 15 minutes have passed OR moisture changed by more than 10%
+        if (timeDiffMinutes < 15 && moistureDiff < 10) {
+          return; // Skip saving to avoid spamming the history list
+        }
+      }
+
+      const entry: HistoryEntry = {
+        id: currentDate.toISOString() + Math.random().toString(),
+        timestamp: currentDate.toISOString(),
+        moisture: soil.moisture,
+        waterFlow: soil.waterFlow, 
+      };
+      
       const updated = [entry, ...existing].slice(0, MAX_HISTORY);
       AsyncStorage.setItem(HISTORY_KEY, JSON.stringify(updated));
       setHistory(updated);
     });
-  }, [soil.lastUpdated?.toISOString()]);
+  }, [soil.lastUpdated?.getTime(), soil.moisture, soil.waterFlow]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);

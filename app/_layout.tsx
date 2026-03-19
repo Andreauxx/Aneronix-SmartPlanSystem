@@ -1,3 +1,4 @@
+import "../firebaseConfig"; // <-- CRITICAL: This wakes up Firebase before the app loads!
 import {
   Inter_400Regular,
   Inter_500Medium,

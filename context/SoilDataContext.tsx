@@ -8,6 +8,9 @@ import React, {
   useState,
 } from "react";
 
+import { ref, onValue } from "firebase/database";
+import { db } from "../firebaseConfig";
+
 export type SoilData = {
   moisture: number;
   waterFlow: number;
@@ -73,6 +76,7 @@ const STORAGE_KEYS = {
   WEATHER_CACHE: "@smartsoil/weather_cache",
 };
 
+// Coordinates for Davao City
 const DAVAO_CITY_COORDS = { lat: 7.1907, lon: 125.4553 };
 const REFRESH_INTERVAL_MS = 30_000;
 
@@ -86,7 +90,6 @@ export function SoilDataProvider({ children }: { children: React.ReactNode }) {
   const [weatherApiKey, setWeatherApiKeyState] = useState("");
   const [firebaseUrl, setFirebaseUrlState] = useState("");
 
-  const soilTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const weatherTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -116,33 +119,54 @@ export function SoilDataProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  const fetchSoilData = useCallback(async (fbUrl: string) => {
-    if (!fbUrl) {
-      setSoilError("No Firebase URL configured. Go to Settings to set it up.");
-      return;
-    }
+ // --- FIREBASE REALTIME LISTENER ---
+  useEffect(() => {
     setIsLoadingSoil(true);
     setSoilError(null);
-    try {
-      const url = fbUrl.replace(/\/$/, "") + "/.json";
-      const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
-      if (!res.ok) throw new Error(`Firebase error: ${res.status}`);
-      const data = await res.json();
-      const newSoil: SoilData = {
-        moisture: typeof data?.soil_moisture === "number" ? Math.max(0, Math.min(100, data.soil_moisture)) : 0,
-        waterFlow: typeof data?.water_flow === "number" ? data.water_flow : 0,
-        lastUpdated: new Date(),
-      };
-      setSoil(newSoil);
-      await AsyncStorage.setItem(STORAGE_KEYS.SOIL_CACHE, JSON.stringify(newSoil));
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to fetch soil data";
-      setSoilError(msg);
-    } finally {
+
+    // 1. Listen to the /sensor node your ESP32 is writing to
+    const sensorRef = ref(db, '/sensor');
+    
+    const unsubscribeSensor = onValue(sensorRef, (snapshot) => {
+      const data = snapshot.val();
+      
+      if (data) {
+        setSoil(prev => {
+          const newSoil = {
+            ...prev,
+            // Match the exact variable name from your ESP32 ("/sensor/moisture")
+            moisture: typeof data?.moisture === "number" ? Math.max(0, Math.min(100, data.moisture)) : prev.moisture,
+            // Note: ESP32 doesn't have a water flow sensor yet, so we keep this at 0 for now
+            waterFlow: typeof data?.water_flow === "number" ? data.water_flow : 0, 
+            lastUpdated: new Date(),
+          };
+          AsyncStorage.setItem(STORAGE_KEYS.SOIL_CACHE, JSON.stringify(newSoil));
+          return newSoil;
+        });
+      }
       setIsLoadingSoil(false);
-    }
+    }, (error) => {
+      setSoilError(`Firebase error: ${error.message}`);
+      setIsLoadingSoil(false);
+    });
+
+    // 2. Optional but awesome: Listen to the /status node so your app knows what the pump is doing!
+    const statusRef = ref(db, '/status');
+    const unsubscribeStatus = onValue(statusRef, (snapshot) => {
+      const statusText = snapshot.val();
+      if (statusText) {
+        console.log("ESP32 Status:", statusText); 
+        // You can save this to state later to show "Irrigating (Dry Soil)" on your dashboard!
+      }
+    });
+
+    return () => {
+      unsubscribeSensor();
+      unsubscribeStatus();
+    };
   }, []);
 
+  // --- WEATHER REST API ---
   const fetchWeatherData = useCallback(async (apiKey: string) => {
     if (!apiKey) {
       setWeatherError("No OpenWeatherMap API key. Go to Settings to configure.");
@@ -174,24 +198,6 @@ export function SoilDataProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const refreshSoil = useCallback(() => {
-    fetchSoilData(firebaseUrl);
-  }, [fetchSoilData, firebaseUrl]);
-
-  const refreshWeather = useCallback(() => {
-    fetchWeatherData(weatherApiKey);
-  }, [fetchWeatherData, weatherApiKey]);
-
-  useEffect(() => {
-    if (firebaseUrl) {
-      fetchSoilData(firebaseUrl);
-      soilTimerRef.current = setInterval(() => fetchSoilData(firebaseUrl), REFRESH_INTERVAL_MS);
-    }
-    return () => {
-      if (soilTimerRef.current) clearInterval(soilTimerRef.current);
-    };
-  }, [firebaseUrl, fetchSoilData]);
-
   useEffect(() => {
     if (weatherApiKey) {
       fetchWeatherData(weatherApiKey);
@@ -201,6 +207,16 @@ export function SoilDataProvider({ children }: { children: React.ReactNode }) {
       if (weatherTimerRef.current) clearInterval(weatherTimerRef.current);
     };
   }, [weatherApiKey, fetchWeatherData]);
+
+  // Pull-to-refresh for weather (Soil is automatic now, so it just simulates a refresh)
+  const refreshSoil = useCallback(() => {
+    // Soil updates automatically via Firebase, so we just clear errors if any
+    setSoilError(null);
+  }, []);
+
+  const refreshWeather = useCallback(() => {
+    fetchWeatherData(weatherApiKey);
+  }, [fetchWeatherData, weatherApiKey]);
 
   const setWeatherApiKey = useCallback(async (key: string) => {
     setWeatherApiKeyState(key);

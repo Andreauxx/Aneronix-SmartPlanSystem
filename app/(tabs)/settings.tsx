@@ -1,285 +1,220 @@
-import { Feather, Ionicons } from "@expo/vector-icons";
-import * as Haptics from "expo-haptics";
-import React, { useState } from "react";
-import {
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import React, { useState, useEffect } from 'react';
+import { View, Text, Switch, StyleSheet, ScrollView, Platform } from 'react-native';
+import Slider from '@react-native-community/slider';
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useSoilData } from "@/context/SoilDataContext";
+import { ref, onValue, update } from 'firebase/database';
+import { db } from '../../firebaseConfig'; 
 import { useTheme } from "@/hooks/useTheme";
-
-function SettingRow({
-  label,
-  hint,
-  value,
-  onChangeText,
-  placeholder,
-  secureTextEntry,
-  colors,
-  isDark,
-}: {
-  label: string;
-  hint: string;
-  value: string;
-  onChangeText: (t: string) => void;
-  placeholder: string;
-  secureTextEntry?: boolean;
-  colors: Record<string, string>;
-  isDark: boolean;
-}) {
-  return (
-    <View style={[styles.settingRow, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-      <Text style={[styles.settingLabel, { color: colors.text, fontFamily: "Inter_600SemiBold" }]}>
-        {label}
-      </Text>
-      <Text style={[styles.settingHint, { color: colors.textSecondary, fontFamily: "Inter_400Regular" }]}>
-        {hint}
-      </Text>
-      <TextInput
-        style={[
-          styles.input,
-          {
-            color: colors.text,
-            backgroundColor: isDark ? colors.surfaceElevated : colors.background,
-            borderColor: colors.border,
-            fontFamily: "Inter_400Regular",
-          },
-        ]}
-        value={value}
-        onChangeText={onChangeText}
-        placeholder={placeholder}
-        placeholderTextColor={colors.textSecondary}
-        secureTextEntry={secureTextEntry}
-        autoCapitalize="none"
-        autoCorrect={false}
-        spellCheck={false}
-      />
-    </View>
-  );
-}
 
 export default function SettingsScreen() {
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
-  const {
-    weatherApiKey,
-    setWeatherApiKey,
-    firebaseUrl,
-    setFirebaseUrl,
-    refreshSoil,
-    refreshWeather,
-  } = useSoilData();
+  
+  const [isOverride, setIsOverride] = useState(false);
+  const [manualRain, setManualRain] = useState(0);
+  const [rainThreshold, setRainThreshold] = useState(50);
+  const [isManualPumpOn, setIsManualPumpOn] = useState(false);
 
-  const [localFirebaseUrl, setLocalFirebaseUrl] = useState(firebaseUrl);
-  const [localApiKey, setLocalApiKey] = useState(weatherApiKey);
-  const [saved, setSaved] = useState(false);
+  useEffect(() => {
+    const controlRef = ref(db, 'control');
+    
+    const unsubscribe = onValue(controlRef, (snapshot) => {
+      const data = snapshot.val();
+      if (data) {
+        setIsOverride(data.weatherOverride ?? false);
+        setManualRain(data.manualRainValue ?? 0);
+        setRainThreshold(data.rainThreshold ?? 50);
+        setIsManualPumpOn(data.manual === 1);
+      }
+    });
+
+    return () => unsubscribe(); 
+  }, []);
+
+  const updateFirebase = (updates: object) => {
+    update(ref(db, 'control'), updates);
+  };
 
   const topPad = Platform.OS === "web" ? Math.max(insets.top, 67) : insets.top;
   const bottomPad = Platform.OS === "web" ? 34 : insets.bottom;
 
-  const handleSave = async () => {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    await setFirebaseUrl(localFirebaseUrl.trim());
-    await setWeatherApiKey(localApiKey.trim());
-    refreshSoil();
-    refreshWeather();
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
-  };
-
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-    >
-      <ScrollView
-        style={[styles.container, { backgroundColor: colors.background }]}
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <ScrollView 
         contentContainerStyle={[
           styles.content,
-          { paddingTop: topPad + 12, paddingBottom: bottomPad + 100 },
+          { paddingTop: topPad + 12, paddingBottom: bottomPad + 100 }
         ]}
         showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
       >
-        {/* Header */}
+        {/* Header matching Dashboard/History */}
         <View style={styles.header}>
+          <Text style={[styles.greeting, { color: colors.textSecondary, fontFamily: "Inter_400Regular" }]}>
+            Developer Panel
+          </Text>
           <Text style={[styles.title, { color: colors.text, fontFamily: "Inter_700Bold" }]}>
             Settings
           </Text>
-          <Text style={[styles.subtitle, { color: colors.textSecondary, fontFamily: "Inter_400Regular" }]}>
-            Configure your data sources
-          </Text>
         </View>
 
-        {/* Firebase Section */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Ionicons name="flame" size={16} color="#FF6D00" />
-            <Text style={[styles.sectionTitle, { color: colors.text, fontFamily: "Inter_600SemiBold" }]}>
-              Firebase Realtime Database
-            </Text>
-          </View>
-          <SettingRow
-            label="Database URL"
-            hint="Your Firebase Realtime DB root URL (e.g. https://project.firebaseio.com)"
-            value={localFirebaseUrl}
-            onChangeText={setLocalFirebaseUrl}
-            placeholder="https://your-project.firebaseio.com"
-            colors={colors}
-            isDark={isDark}
-          />
-          <View style={[styles.infoBox, { backgroundColor: colors.cardMoisture ?? colors.surface }]}>
-            <Feather name="info" size={14} color={colors.primary} />
-            <Text style={[styles.infoText, { color: colors.textSecondary, fontFamily: "Inter_400Regular" }]}>
-              The app reads{" "}
-              <Text style={{ fontFamily: "Inter_600SemiBold", color: colors.text }}>
-                soil_moisture
-              </Text>{" "}
-              (integer 0–100) and{" "}
-              <Text style={{ fontFamily: "Inter_600SemiBold", color: colors.text }}>
-                water_flow
-              </Text>{" "}
-              (float, liters) from your database root.
-            </Text>
-          </View>
-        </View>
+        <Text style={[styles.description, { color: colors.textSecondary, fontFamily: "Inter_400Regular" }]}>
+          Use these controls to test the Smart Soil logic and force hardware overrides.
+        </Text>
 
-        {/* OpenWeatherMap Section */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Ionicons name="partly-sunny" size={16} color="#E9C46A" />
-            <Text style={[styles.sectionTitle, { color: colors.text, fontFamily: "Inter_600SemiBold" }]}>
-              OpenWeatherMap API
-            </Text>
-          </View>
-          <SettingRow
-            label="API Key"
-            hint="Get a free key at openweathermap.org/api"
-            value={localApiKey}
-            onChangeText={setLocalApiKey}
-            placeholder="Your API key"
-            secureTextEntry={false}
-            colors={colors}
-            isDark={isDark}
-          />
-          <View style={[styles.infoBox, { backgroundColor: colors.cardWeather ?? colors.surface }]}>
-            <Feather name="map-pin" size={14} color={colors.warning} />
-            <Text style={[styles.infoText, { color: colors.textSecondary, fontFamily: "Inter_400Regular" }]}>
-              Weather is fetched for{" "}
-              <Text style={{ fontFamily: "Inter_600SemiBold", color: colors.text }}>
-                Davao City, Philippines
+        {/* --- Manual Pump Override --- */}
+        <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <View style={styles.row}>
+            <View style={styles.iconContainer}>
+              <MaterialCommunityIcons name="water-pump" size={24} color={isManualPumpOn ? colors.primary : colors.textSecondary} />
+            </View>
+            <View style={styles.textContainer}>
+              <Text style={[styles.label, { color: colors.text, fontFamily: "Inter_600SemiBold" }]}>
+                Manual Pump Control
               </Text>
-              . Data refreshes every 60 seconds.
-            </Text>
+              <Text style={[styles.subtext, { color: colors.textSecondary, fontFamily: "Inter_400Regular" }]}>
+                Force the water pump ON/OFF
+              </Text>
+            </View>
+            <Switch 
+              value={isManualPumpOn} 
+              onValueChange={(val) => updateFirebase({ manual: val ? 1 : 0 })} 
+              trackColor={{ false: colors.border, true: colors.primary + "80" }}
+              thumbColor={isManualPumpOn ? colors.primary : "#f4f3f4"}
+            />
           </View>
         </View>
 
-        {/* Smart Logic Section */}
-        <View style={[styles.smartSection, { backgroundColor: colors.cardAlert ?? colors.surface, borderColor: colors.danger + "40" }]}>
-          <Ionicons name="bulb" size={20} color={colors.danger} />
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.smartTitle, { color: colors.text, fontFamily: "Inter_600SemiBold" }]}>
-              Smart Watering Logic
-            </Text>
-            <Text style={[styles.smartText, { color: colors.textSecondary, fontFamily: "Inter_400Regular" }]}>
-              A{" "}
-              <Text style={{ color: colors.danger, fontFamily: "Inter_600SemiBold" }}>
-                "Watering Paused: Rain Expected"
-              </Text>{" "}
-              alert appears on the dashboard when soil moisture drops below 40% AND
-              OpenWeatherMap reports Rain, Drizzle, or Thunderstorm conditions.
-            </Text>
+        {/* --- Weather Simulation Toggle --- */}
+        <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <View style={styles.row}>
+            <View style={styles.iconContainer}>
+              <Ionicons name="cloud-offline" size={22} color={isOverride ? colors.warning : colors.textSecondary} />
+            </View>
+            <View style={styles.textContainer}>
+              <Text style={[styles.label, { color: colors.text, fontFamily: "Inter_600SemiBold" }]}>
+                Weather Simulation
+              </Text>
+              <Text style={[styles.subtext, { color: colors.textSecondary, fontFamily: "Inter_400Regular" }]}>
+                Override OpenWeather API
+              </Text>
+            </View>
+            <Switch 
+              value={isOverride} 
+              onValueChange={(val) => updateFirebase({ weatherOverride: val })} 
+              trackColor={{ false: colors.border, true: colors.warning + "80" }}
+              thumbColor={isOverride ? colors.warning : "#f4f3f4"}
+            />
           </View>
         </View>
 
-        {/* Save Button */}
-        <TouchableOpacity
-          style={[
-            styles.saveBtn,
-            { backgroundColor: saved ? colors.primaryLight : colors.primary },
-          ]}
-          onPress={handleSave}
-          activeOpacity={0.85}
-        >
-          {saved ? (
-            <Ionicons name="checkmark" size={20} color="#fff" />
-          ) : (
-            <Feather name="save" size={18} color="#fff" />
-          )}
-          <Text style={[styles.saveBtnText, { fontFamily: "Inter_700Bold" }]}>
-            {saved ? "Saved!" : "Save & Connect"}
+        {/* --- Manual Rain Value Slider --- */}
+        <View style={[
+          styles.card, 
+          { backgroundColor: colors.surface, borderColor: colors.border },
+          !isOverride && styles.disabledCard
+        ]}>
+          <View style={styles.sliderHeader}>
+            <Ionicons name="rainy" size={20} color={isOverride ? colors.warning : colors.textSecondary} />
+            <Text style={[styles.sliderTitle, { color: colors.text, fontFamily: "Inter_600SemiBold" }]}>
+              Simulated Rain: <Text style={{ color: colors.warning }}>{manualRain}%</Text>
+            </Text>
+          </View>
+          <Slider
+            style={styles.slider}
+            minimumValue={0}
+            maximumValue={100}
+            step={1}
+            disabled={!isOverride}
+            value={manualRain}
+            onSlidingComplete={(val) => updateFirebase({ manualRainValue: Math.round(val) })}
+            minimumTrackTintColor={colors.warning}
+            maximumTrackTintColor={colors.border}
+            thumbTintColor={isOverride ? colors.warning : colors.border}
+          />
+          <Text style={[styles.sliderSubtext, { color: colors.textSecondary, fontFamily: "Inter_400Regular" }]}>
+            Set the "fake" rain value the ESP32 will see when simulation is active.
           </Text>
-        </TouchableOpacity>
+        </View>
+
+        {/* --- Rain Threshold Slider --- */}
+        <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <View style={styles.sliderHeader}>
+            <MaterialCommunityIcons name="weather-pouring" size={20} color={colors.primary} />
+            <Text style={[styles.sliderTitle, { color: colors.text, fontFamily: "Inter_600SemiBold" }]}>
+              Irrigation Stop Threshold: <Text style={{ color: colors.primary }}>{rainThreshold}%</Text>
+            </Text>
+          </View>
+          <Slider
+            style={styles.slider}
+            minimumValue={0}
+            maximumValue={100}
+            step={5}
+            value={rainThreshold}
+            onSlidingComplete={(val) => updateFirebase({ rainThreshold: Math.round(val) })}
+            minimumTrackTintColor={colors.primary}
+            maximumTrackTintColor={colors.border}
+            thumbTintColor={colors.primary}
+          />
+          <Text style={[styles.sliderSubtext, { color: colors.textSecondary, fontFamily: "Inter_400Regular" }]}>
+            If rain probability is above this %, the pump will stay OFF even if soil is dry.
+          </Text>
+        </View>
+
       </ScrollView>
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  content: { paddingHorizontal: 20, gap: 20 },
-  header: { gap: 4 },
-  title: { fontSize: 30 },
-  subtitle: { fontSize: 14 },
-  section: { gap: 12 },
-  sectionHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
+  content: { paddingHorizontal: 20 },
+  header: {
+    marginBottom: 8,
   },
-  sectionTitle: { fontSize: 16 },
-  settingRow: {
-    borderRadius: 16,
-    padding: 16,
-    gap: 8,
+  greeting: { fontSize: 13, letterSpacing: 0.5, textTransform: "uppercase" },
+  title: { fontSize: 30, marginTop: 2 },
+  description: { fontSize: 14, marginBottom: 24, lineHeight: 20 },
+  card: { 
+    padding: 16, 
+    borderRadius: 16, 
     borderWidth: 1,
+    marginBottom: 16,
   },
-  settingLabel: { fontSize: 14 },
-  settingHint: { fontSize: 12, lineHeight: 18 },
-  input: {
-    borderWidth: 1,
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    fontSize: 14,
-  },
-  infoBox: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 10,
-    borderRadius: 12,
-    padding: 12,
-  },
-  infoText: { flex: 1, fontSize: 13, lineHeight: 18 },
-  smartSection: {
-    flexDirection: "row",
+  disabledCard: { opacity: 0.5 },
+  row: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    alignItems: 'center',
     gap: 12,
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    alignItems: "flex-start",
   },
-  smartTitle: { fontSize: 14, marginBottom: 4 },
-  smartText: { fontSize: 13, lineHeight: 19 },
-  saveBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 10,
-    paddingVertical: 16,
-    borderRadius: 16,
+  iconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: 'rgba(0,0,0,0.04)', // subtle background for icons
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  textContainer: {
+    flex: 1,
+  },
+  label: { fontSize: 16 },
+  subtext: { fontSize: 12, marginTop: 2 },
+  sliderHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  sliderTitle: { fontSize: 16 },
+  slider: { 
+    width: '100%', 
+    height: 40,
+  },
+  sliderSubtext: { 
+    fontSize: 12, 
     marginTop: 4,
-  },
-  saveBtnText: {
-    color: "#fff",
-    fontSize: 16,
+    lineHeight: 18,
   },
 });
