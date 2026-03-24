@@ -14,7 +14,8 @@ export default function SettingsScreen() {
   const [isOverride, setIsOverride] = useState(false);
   const [manualRain, setManualRain] = useState(0);
   const [rainThreshold, setRainThreshold] = useState(50);
-  const [isManualPumpOn, setIsManualPumpOn] = useState(false);
+  const [isManualMode, setIsManualMode] = useState(false);
+  const [dailyBudget, setDailyBudget] = useState(5.0);
 
   useEffect(() => {
     const controlRef = ref(db, 'control');
@@ -25,7 +26,8 @@ export default function SettingsScreen() {
         setIsOverride(data.weatherOverride ?? false);
         setManualRain(data.manualRainValue ?? 0);
         setRainThreshold(data.rainThreshold ?? 50);
-        setIsManualPumpOn(data.manual === 1);
+        setIsManualMode(data.manualMode === 1);
+        setDailyBudget(data.dailyBudget ?? 5.0);
       }
     });
 
@@ -48,10 +50,9 @@ export default function SettingsScreen() {
         ]}
         showsVerticalScrollIndicator={false}
       >
-        {/* Header matching Dashboard/History */}
         <View style={styles.header}>
           <Text style={[styles.greeting, { color: colors.textSecondary, fontFamily: "Inter_400Regular" }]}>
-            Developer Panel
+            System Configuration
           </Text>
           <Text style={[styles.title, { color: colors.text, fontFamily: "Inter_700Bold" }]}>
             Settings
@@ -59,28 +60,52 @@ export default function SettingsScreen() {
         </View>
 
         <Text style={[styles.description, { color: colors.textSecondary, fontFamily: "Inter_400Regular" }]}>
-          Use these controls to test the Smart Soil logic and force hardware overrides.
+          Configure Aneronix thresholds and test hardware logic through cloud overrides.
         </Text>
 
-        {/* --- Manual Pump Override --- */}
+        {/* --- NEW: Daily Water Budget --- */}
+        <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <View style={styles.sliderHeader}>
+            <MaterialCommunityIcons name="water-pump" size={20} color={colors.water} />
+            <Text style={[styles.sliderTitle, { color: colors.text, fontFamily: "Inter_600SemiBold" }]}>
+              Daily Water Budget: <Text style={{ color: colors.water }}>{dailyBudget}L</Text>
+            </Text>
+          </View>
+          <Slider
+            style={styles.slider}
+            minimumValue={1.0}
+            maximumValue={20.0}
+            step={0.5}
+            value={dailyBudget}
+            onSlidingComplete={(val) => updateFirebase({ dailyBudget: parseFloat(val.toFixed(1)) })}
+            minimumTrackTintColor={colors.water}
+            maximumTrackTintColor={colors.border}
+            thumbTintColor={colors.water}
+          />
+          <Text style={[styles.sliderSubtext, { color: colors.textSecondary }]}>
+            Set your daily consumption target. This updates the dashboard progress tracker.
+          </Text>
+        </View>
+
+        {/* --- System Mode Toggle --- */}
         <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <View style={styles.row}>
             <View style={styles.iconContainer}>
-              <MaterialCommunityIcons name="water-pump" size={24} color={isManualPumpOn ? colors.primary : colors.textSecondary} />
+              <MaterialCommunityIcons name="cog-refresh" size={22} color={isManualMode ? colors.warning : colors.primary} />
             </View>
             <View style={styles.textContainer}>
               <Text style={[styles.label, { color: colors.text, fontFamily: "Inter_600SemiBold" }]}>
-                Manual Pump Control
+                Manual Override Mode
               </Text>
-              <Text style={[styles.subtext, { color: colors.textSecondary, fontFamily: "Inter_400Regular" }]}>
-                Force the water pump ON/OFF
+              <Text style={[styles.subtext, { color: colors.textSecondary }]}>
+                Bypass smart sensors for direct control
               </Text>
             </View>
             <Switch 
-              value={isManualPumpOn} 
-              onValueChange={(val) => updateFirebase({ manual: val ? 1 : 0 })} 
-              trackColor={{ false: colors.border, true: colors.primary + "80" }}
-              thumbColor={isManualPumpOn ? colors.primary : "#f4f3f4"}
+              value={isManualMode} 
+              onValueChange={(val) => updateFirebase({ manualMode: val ? 1 : 0, pumpON: 0 })} 
+              trackColor={{ false: colors.border, true: colors.warning + "80" }}
+              thumbColor={isManualMode ? colors.warning : "#f4f3f4"}
             />
           </View>
         </View>
@@ -95,8 +120,8 @@ export default function SettingsScreen() {
               <Text style={[styles.label, { color: colors.text, fontFamily: "Inter_600SemiBold" }]}>
                 Weather Simulation
               </Text>
-              <Text style={[styles.subtext, { color: colors.textSecondary, fontFamily: "Inter_400Regular" }]}>
-                Override OpenWeather API
+              <Text style={[styles.subtext, { color: colors.textSecondary }]}>
+                Override real-time OpenWeather API
               </Text>
             </View>
             <Switch 
@@ -117,7 +142,7 @@ export default function SettingsScreen() {
           <View style={styles.sliderHeader}>
             <Ionicons name="rainy" size={20} color={isOverride ? colors.warning : colors.textSecondary} />
             <Text style={[styles.sliderTitle, { color: colors.text, fontFamily: "Inter_600SemiBold" }]}>
-              Simulated Rain: <Text style={{ color: colors.warning }}>{manualRain}%</Text>
+              Simulated Rain Prob: <Text style={{ color: colors.warning }}>{manualRain}%</Text>
             </Text>
           </View>
           <Slider
@@ -132,8 +157,8 @@ export default function SettingsScreen() {
             maximumTrackTintColor={colors.border}
             thumbTintColor={isOverride ? colors.warning : colors.border}
           />
-          <Text style={[styles.sliderSubtext, { color: colors.textSecondary, fontFamily: "Inter_400Regular" }]}>
-            Set the "fake" rain value the ESP32 will see when simulation is active.
+          <Text style={[styles.sliderSubtext, { color: colors.textSecondary }]}>
+            Simulate a rain probability to test "Rain Delay" behavior.
           </Text>
         </View>
 
@@ -142,7 +167,7 @@ export default function SettingsScreen() {
           <View style={styles.sliderHeader}>
             <MaterialCommunityIcons name="weather-pouring" size={20} color={colors.primary} />
             <Text style={[styles.sliderTitle, { color: colors.text, fontFamily: "Inter_600SemiBold" }]}>
-              Irrigation Stop Threshold: <Text style={{ color: colors.primary }}>{rainThreshold}%</Text>
+              Rain Delay Threshold: <Text style={{ color: colors.primary }}>{rainThreshold}%</Text>
             </Text>
           </View>
           <Slider
@@ -156,8 +181,8 @@ export default function SettingsScreen() {
             maximumTrackTintColor={colors.border}
             thumbTintColor={colors.primary}
           />
-          <Text style={[styles.sliderSubtext, { color: colors.textSecondary, fontFamily: "Inter_400Regular" }]}>
-            If rain probability is above this %, the pump will stay OFF even if soil is dry.
+          <Text style={[styles.sliderSubtext, { color: colors.textSecondary }]}>
+            If rain probability is above this, Aneronix will pause irrigation.
           </Text>
         </View>
 
@@ -169,52 +194,19 @@ export default function SettingsScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   content: { paddingHorizontal: 20 },
-  header: {
-    marginBottom: 8,
-  },
+  header: { marginBottom: 8 },
   greeting: { fontSize: 13, letterSpacing: 0.5, textTransform: "uppercase" },
   title: { fontSize: 30, marginTop: 2 },
   description: { fontSize: 14, marginBottom: 24, lineHeight: 20 },
-  card: { 
-    padding: 16, 
-    borderRadius: 16, 
-    borderWidth: 1,
-    marginBottom: 16,
-  },
-  disabledCard: { opacity: 0.5 },
-  row: { 
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
-    alignItems: 'center',
-    gap: 12,
-  },
-  iconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
-    backgroundColor: 'rgba(0,0,0,0.04)', // subtle background for icons
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  textContainer: {
-    flex: 1,
-  },
+  card: { padding: 16, borderRadius: 16, borderWidth: 1, marginBottom: 16 },
+  disabledCard: { opacity: 0.4 },
+  row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12 },
+  iconContainer: { width: 40, height: 40, borderRadius: 10, backgroundColor: 'rgba(0,0,0,0.04)', alignItems: 'center', justifyContent: 'center' },
+  textContainer: { flex: 1 },
   label: { fontSize: 16 },
   subtext: { fontSize: 12, marginTop: 2 },
-  sliderHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 12,
-  },
+  sliderHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
   sliderTitle: { fontSize: 16 },
-  slider: { 
-    width: '100%', 
-    height: 40,
-  },
-  sliderSubtext: { 
-    fontSize: 12, 
-    marginTop: 4,
-    lineHeight: 18,
-  },
+  slider: { width: '100%', height: 40 },
+  sliderSubtext: { fontSize: 11, marginTop: 4, lineHeight: 16, fontStyle: 'italic' },
 });
